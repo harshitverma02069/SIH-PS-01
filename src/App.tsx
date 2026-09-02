@@ -578,7 +578,7 @@ function WeatherPage() {
 
     try {
       const url = lat !== undefined && lon !== undefined
-        ? `${API}/api/weather?lat=${lat}&lon=${lon}`
+        ? `${API}/api/weather?latitude=${lat}&longitude=${lon}`
         : `${API}/api/weather?location=${encodeURIComponent(name || location)}`;
 
       const response = await fetch(url);
