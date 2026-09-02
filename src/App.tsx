@@ -331,26 +331,63 @@ function Metric({ name, value, percent }: { name: string; value: string; percent
 
 function AlertsPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [source, setSource] = useState("UNKNOWN");
+  const [sourceType, setSourceType] = useState("UNKNOWN");
+  const [timestamp, setTimestamp] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${API}/api/alerts`)
       .then(r => r.json())
-      .then(data => setAlerts(data.alerts || []))
-      .catch(() => setAlerts([]));
+      .then(data => {
+        setAlerts(data.alerts || []);
+        setSource(data.source || "UNKNOWN");
+        setSourceType(data.source_type || "UNKNOWN");
+        setTimestamp(data.timestamp || "");
+      })
+      .catch(() => {
+        setAlerts([]);
+        setSource("UNAVAILABLE");
+        setSourceType("OFFLINE");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  return <Page title="🚨 Alerts" description="Live risk-based warnings and notification queue.">
-    {alerts.length > 0
-      ? alerts.map(a => (
+  const critical = alerts.filter(a => a.severity === "CRITICAL").length;
+  const high = alerts.filter(a => a.severity === "HIGH").length;
+
+  return (
+    <Page
+      title="🚨 Alerts"
+      description="Live risk-based warnings and notification queue."
+    >
+      <div className="stats">
+        <Card title="Active Alerts" value={String(alerts.length)} />
+        <Card title="Critical" value={String(critical)} danger />
+        <Card title="High Risk" value={String(high)} />
+      </div>
+
+      <div className="notice">
+        🌐 <strong>{source}</strong> • {sourceType}
+        {timestamp && <> • Updated: {timestamp}</>}
+      </div>
+
+      {loading ? (
+        <div className="notice">Loading live alerts...</div>
+      ) : alerts.length > 0 ? (
+        alerts.map(a => (
           <Alert
             key={a.id}
             level={a.severity}
             location={a.location}
-            text={a.message}
+            text={`${a.message} Risk score: ${a.risk_score}/100`}
           />
         ))
-      : <div className="notice">No active alerts.</div>}
-  </Page>;
+      ) : (
+        <div className="notice">🟢 No active alerts.</div>
+      )}
+    </Page>
+  );
 }
 
 function Alert({ level, location, text }: { level: string; location: string; text: string }) {
