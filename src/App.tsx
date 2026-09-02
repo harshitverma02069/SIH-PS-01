@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
@@ -156,12 +158,80 @@ function Feature({ text }: { text: string }) {
 }
 
 function MapPage({ zones }: { zones: RiskZone[] }) {
-  return <Page title="🗺️ GIS Risk Map" description="Vulnerable locations across the North Eastern Region.">
-    <div className="map">
-      {zones.map((z, i) => <div className={`mapPoint p${i + 1}`} key={z.id} title={z.name}>●<span>{z.name}<br />Risk {z.score}</span></div>)}
-      <div className="mapCenter">NORTH EASTERN REGION<br /><small>Interactive GIS layer — demo visualization</small></div>
-    </div>
-  </Page>;
+  useEffect(() => {
+    const map = L.map("risk-map").setView([25.8, 91.8], 6);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    const locations: Record<string, [number, number]> = {
+      "Aizawl North": [23.7271, 92.7176],
+      "Gangtok East": [27.3389, 88.6065],
+      "Shillong Hills": [25.5788, 91.8933],
+      "Kohima West": [25.6751, 94.1086],
+      "Itanagar South": [27.0844, 93.6053],
+    };
+
+    zones.forEach(z => {
+      const position = locations[z.name];
+      if (!position) return;
+
+      const color =
+        z.level === "CRITICAL" ? "#dc2626" :
+        z.level === "HIGH" ? "#ea580c" :
+        z.level === "MODERATE" ? "#ca8a04" :
+        "#16a34a";
+
+      const marker = L.circleMarker(position, {
+        radius: 10,
+        color,
+        fillColor: color,
+        fillOpacity: 0.75,
+        weight: 3,
+      }).addTo(map);
+
+      marker.bindPopup(`
+        <strong>${z.name}</strong><br/>
+        ${z.state}<br/>
+        <b>Risk: ${z.score}/100</b><br/>
+        Level: ${z.level}<br/>
+        Rainfall: ${z.rainfall} mm<br/>
+        Soil Moisture: ${z.soil_moisture}%<br/>
+        Slope: ${z.slope}°
+      `);
+    });
+
+    return () => {
+      map.remove();
+    };
+  }, [zones]);
+
+  return (
+    <Page
+      title="🗺️ GIS Risk Map"
+      description="Live vulnerable zones across the North Eastern Region."
+    >
+      <div
+        id="risk-map"
+        style={{
+          height: "560px",
+          width: "100%",
+          borderRadius: "16px",
+          overflow: "hidden",
+          border: "1px solid #ddd",
+        }}
+      />
+
+      <div className="mapLegend">
+        <strong>Risk Level</strong>
+        <span><i className="legendDot criticalDot" /> Critical</span>
+        <span><i className="legendDot highDot" /> High</span>
+        <span><i className="legendDot moderateDot" /> Moderate</span>
+        <span><i className="legendDot lowDot" /> Low</span>
+      </div>
+    </Page>
+  );
 }
 
 function PredictionPage({ zones }: { zones: RiskZone[] }) {
