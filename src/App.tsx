@@ -568,24 +568,97 @@ function RoadPage() {
 }
 function WeatherPage() {
   const [weather, setWeather] = useState<any>(null);
+  const [location, setLocation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadWeather = async (lat?: number, lon?: number, name?: string) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const url = lat !== undefined && lon !== undefined
+        ? `${API}/api/weather?lat=${lat}&lon=${lon}`
+        : `${API}/api/weather?location=${encodeURIComponent(name || location)}`;
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error("Weather request failed");
+      }
+
+      setWeather(await response.json());
+    } catch {
+      setWeather(null);
+      setError("Unable to load weather for this location.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Your browser does not support location access.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        loadWeather(
+          position.coords.latitude,
+          position.coords.longitude,
+          "My Current Location"
+        );
+      },
+      () => {
+        setLoading(false);
+        setError("Location permission was denied.");
+      }
+    );
+  };
 
   useEffect(() => {
-    fetch(`${API}/api/weather`).then(r => r.json()).then(setWeather).catch(() => setWeather(null));
+    useMyLocation();
   }, []);
 
   return <Page title="🌧️ Weather Risk" description="Live weather-linked risk indicators.">
-    {weather ? (
+
+    <div className="stats">
+      <button onClick={useMyLocation}>
+        📍 Use My Current Location
+      </button>
+
+      <input
+        value={location}
+        onChange={e => setLocation(e.target.value)}
+        placeholder="Enter any city or location"
+      />
+
+      <button onClick={() => loadWeather()}>
+        🔍 Search Weather
+      </button>
+    </div>
+
+    {loading && <div className="notice">Loading live weather data...</div>}
+
+    {error && <div className="notice">{error}</div>}
+
+    {weather && !loading && (
       <>
         <div className="stats">
-          <Card title="Rainfall (24h)" value={`${weather.rainfall_24h_mm} mm`} />
-          <Card title="Soil Moisture" value={`${weather.soil_moisture_percent}%`} />
-          <Card title="Temperature" value={`${weather.temperature_c}°C`} />
+          <Card title="Rainfall (24h)" value={`${weather.rainfall_24h_mm ?? 0} mm`} />
+          <Card title="Soil Moisture" value={`${weather.soil_moisture_percent ?? 0}%`} />
+          <Card title="Temperature" value={`${weather.temperature_c ?? "--"}°C`} />
         </div>
+
         <div className="notice">
           🟢 LIVE DATA • {weather.source} • {weather.location} • Risk: {weather.risk}
         </div>
       </>
-    ) : <div className="notice">Loading live weather data...</div>}
+    )}
   </Page>;
 }
 
