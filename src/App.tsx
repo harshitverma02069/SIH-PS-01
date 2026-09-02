@@ -234,8 +234,21 @@ function ReportPage() {
     form.append("incident_type", incidentType);
     form.append("severity", severity);
     form.append("description", description);
-    form.append("latitude", "23.1645");
-    form.append("longitude", "92.9376");
+    const location = await new Promise<GeolocationPosition>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      });
+    });
+
+    form.append("latitude", String(location.coords.latitude));
+    form.append("longitude", String(location.coords.longitude));
 
     if (files) {
       Array.from(files).forEach(file => {
@@ -294,7 +307,9 @@ function ReportPage() {
         />
       </label>
 
-      <div className="location">📍 GPS Location: Ready to capture</div>
+      <div className="location">
+        📍 GPS Location: Captured automatically when submitting
+      </div>
 
       <label>
         Evidence
