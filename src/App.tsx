@@ -572,25 +572,131 @@ function WeatherPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const loadWeather = async (lat?: number, lon?: number, name?: string) => {
+  const fetchWeather = async (
+    latitude: number,
+    longitude: number,
+    locationName: string
+  ) => {
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers&hourly=precipitation,soil_moisture_0_to_7cm&past_days=1&forecast_days=2&timezone=auto`
+    );
+
+    if (!response.ok) {
+      throw new Error("Weather provider unavailable");
+    }
+
+    const data = await response.json();
+
+    const current = data.current;
+    const hourly = data.hourly;
+
+    const currentTime = new Date(current.time).getTime();
+
+    let index = 0;
+    let closest = Infinity;
+
+    hourly.time.forEach((t: string, i: number) => {
+      const difference = Math.abs(
+        new Date(t).getTime() - currentTime
+      );
+
+      if (difference < closest) {
+        closest = difference;
+        index = i;
+      }
+    });
+
+    const rainfall24h = hourly.precipitation
+      .slice(Math.max(0, index - 24), index + 1)
+      .reduce(
+        (sum: number, value: number | null) => sum + (value || 0),
+        0
+      );
+
+    const soil = hourly.soil_moisture_0_to_7cm[index];
+
+    let risk = "LOW";
+
+    if (rainfall24h >= 100) {
+      risk = "CRITICAL";
+    } else if (rainfall24h >= 50) {
+      risk = "HIGH";
+    } else if (rainfall24h >= 20) {
+      risk = "MODERATE";
+    }
+
+    setWeather({
+      source: "Open-Meteo",
+      source_type: "LIVE_WEATHER_API",
+      location: locationName,
+      latitude,
+      longitude,
+      temperature_c: current.temperature_2m,
+      humidity_percent: current.relative_humidity_2m,
+      rainfall_24h_mm: Number(rainfall24h.toFixed(2)),
+      current_precipitation_mm: current.precipitation,
+      soil_moisture_percent:
+        soil != null ? Number((soil * 100).toFixed(1)) : null,
+      risk,
+      timestamp: current.time,
+    });
+  };
+
+  const loadWeather = async (
+    lat?: number,
+    lon?: number,
+    name?: string
+  ) => {
     setLoading(true);
     setError("");
 
     try {
-      const url = lat !== undefined && lon !== undefined
-        ? `${API}/api/weather?latitude=${lat}&longitude=${lon}`
-        : `${API}/api/weather?location=${encodeURIComponent(name || location)}`;
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error("Weather request failed");
+      if (lat !== undefined && lon !== undefined) {
+        await fetchWeather(lat, lon, name || "Current Location");
+        return;
       }
 
-      setWeather(await response.json());
-    } catch {
+      const search = (name || location).trim();
+
+      if (!search) {
+        throw new Error("Please enter a location");
+      }
+
+      const geoResponse = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(search)}&count=1&language=en&format=json`
+      );
+
+      if (!geoResponse.ok) {
+        throw new Error("Location search failed");
+      }
+
+      const geoData = await geoResponse.json();
+
+      if (!geoData.results || geoData.results.length === 0) {
+        throw new Error("Location not found");
+      }
+
+      const place = geoData.results[0];
+
+      const parts = [
+        place.name,
+        place.admin1,
+        place.country
+      ].filter(Boolean);
+
+      await fetchWeather(
+        place.latitude,
+        place.longitude,
+        parts.join(", ")
+      );
+
+    } catch (e) {
       setWeather(null);
-      setError("Unable to load weather for this location.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Unable to load weather for this location."
+      );
     } finally {
       setLoading(false);
     }
@@ -615,7 +721,14 @@ function WeatherPage() {
       },
       () => {
         setLoading(false);
-        setError("Location permission was denied.");
+        setError(
+          "Location permission was denied. Please allow location access."
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 60000
       }
     );
   };
@@ -624,42 +737,90 @@ function WeatherPage() {
     useMyLocation();
   }, []);
 
-  return <Page title="🌧️ Weather Risk" description="Live weather-linked risk indicators.">
+  return (
+    <Page
+      title="🌧️ Weather Risk"
+      description="Live weather-linked risk indicators."
+    >
+      <div className="stats">
+        <button onClick={useMyLocation}>
+          📍 Use My Current Location
+        </button>
 
-    <div className="stats">
-      <button onClick={useMyLocation}>
-        📍 Use My Current Location
-      </button>
+        <input
+          value={location}
+          onChange={e => setLocation(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              loadWeather();
+            }
+          }}
+          placeholder="Enter any city or location"
+        />
 
-      <input
-        value={location}
-        onChange={e => setLocation(e.target.value)}
-        placeholder="Enter any city or location"
-      />
+        <button onClick={() => loadWeather()}>
+          🔍 Search Weather
+        </button>
+      </div>
 
-      <button onClick={() => loadWeather()}>
-        🔍 Search Weather
-      </button>
-    </div>
-
-    {loading && <div className="notice">Loading live weather data...</div>}
-
-    {error && <div className="notice">{error}</div>}
-
-    {weather && !loading && (
-      <>
-        <div className="stats">
-          <Card title="Rainfall (24h)" value={`${weather.rainfall_24h_mm ?? 0} mm`} />
-          <Card title="Soil Moisture" value={`${weather.soil_moisture_percent ?? 0}%`} />
-          <Card title="Temperature" value={`${weather.temperature_c ?? "--"}°C`} />
-        </div>
-
+      {loading && (
         <div className="notice">
-          🟢 LIVE DATA • {weather.source} • {weather.location} • Risk: {weather.risk}
+          Loading live weather data...
         </div>
-      </>
-    )}
-  </Page>;
+      )}
+
+      {error && (
+        <div className="notice">
+          ⚠️ {error}
+        </div>
+      )}
+
+      {weather && !loading && (
+        <>
+          <div className="stats">
+            <Card
+              title="Rainfall (24h)"
+              value={`${weather.rainfall_24h_mm} mm`}
+            />
+
+            <Card
+              title="Soil Moisture"
+              value={
+                weather.soil_moisture_percent != null
+                  ? `${weather.soil_moisture_percent}%`
+                  : "N/A"
+              }
+            />
+
+            <Card
+              title="Temperature"
+              value={`${weather.temperature_c}°C`}
+            />
+
+            <Card
+              title="Humidity"
+              value={`${weather.humidity_percent}%`}
+            />
+
+            <Card
+              title="Current Rain"
+              value={`${weather.current_precipitation_mm} mm`}
+            />
+          </div>
+
+          <div className="notice">
+            🟢 LIVE DATA • {weather.source} • {weather.location} • Risk: {weather.risk}
+          </div>
+
+          <div className="notice">
+            📍 Coordinates: {weather.latitude.toFixed(4)}, {weather.longitude.toFixed(4)}
+            {" • "}
+            🕒 {weather.timestamp}
+          </div>
+        </>
+      )}
+    </Page>
+  );
 }
 
 function EmergencyPage() {
