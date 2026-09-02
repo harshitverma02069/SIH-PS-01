@@ -237,19 +237,92 @@ function MapPage({ zones }: { zones: RiskZone[] }) {
 }
 
 function PredictionPage({ zones }: { zones: RiskZone[] }) {
-  const z = zones[0];
-  return <Page title="🤖 AI Risk Prediction" description="Baseline risk assessment using environmental indicators.">
-    <div className="prediction">
-      <h2>{z.name}, {z.state}</h2>
-      <div className="bigScore">{z.score}<small>/100</small></div>
-      <div className="pill critical">{z.level}</div>
-      <Metric name="Rainfall" value={`${z.rainfall} mm`} percent={91} />
-      <Metric name="Soil Moisture" value={`${z.soil_moisture}%`} percent={81} />
-      <Metric name="Slope" value={`${z.slope}°`} percent={72} />
-      <Metric name="Historical susceptibility" value="High" percent={76} />
-      <div className="notice">⚠️ Baseline/demo risk engine. This is not a scientifically validated prediction model.</div>
-    </div>
-  </Page>;
+  const [selectedId, setSelectedId] = useState(zones[0]?.id ?? 1);
+
+  const z = zones.find(zone => zone.id === selectedId) ?? zones[0];
+
+  if (!z) {
+    return (
+      <Page
+        title="🤖 AI Risk Prediction"
+        description="Live environmental risk assessment."
+      >
+        <div className="notice">No risk-zone data available.</div>
+      </Page>
+    );
+  }
+
+  const rainfallPercent = Math.min(100, Math.round((z.rainfall / 200) * 100));
+  const soilPercent = Math.min(100, Math.round(z.soil_moisture));
+  const slopePercent = Math.min(100, Math.round((z.slope / 45) * 100));
+
+  const levelClass = z.level.toLowerCase();
+
+  return (
+    <Page
+      title="🤖 AI Risk Prediction"
+      description="Live risk assessment based on environmental indicators."
+    >
+      <div className="prediction">
+        <label>
+          Select Risk Zone
+          <select
+            value={selectedId}
+            onChange={e => setSelectedId(Number(e.target.value))}
+          >
+            {zones.map(zone => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name} — {zone.level} ({zone.score}/100)
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <h2>{z.name}, {z.state}</h2>
+
+        <div className="bigScore">
+          {z.score}<small>/100</small>
+        </div>
+
+        <div className={`pill ${levelClass}`}>{z.level}</div>
+
+        <Metric
+          name="Rainfall"
+          value={`${z.rainfall} mm`}
+          percent={rainfallPercent}
+        />
+
+        <Metric
+          name="Soil Moisture"
+          value={`${z.soil_moisture}%`}
+          percent={soilPercent}
+        />
+
+        <Metric
+          name="Slope"
+          value={`${z.slope}°`}
+          percent={slopePercent}
+        />
+
+        <Metric
+          name="Risk Score"
+          value={`${z.score}/100`}
+          percent={z.score}
+        />
+
+        <div className="notice">
+          🌐 LIVE DATA • Weather-linked baseline risk assessment
+          <br />
+          Risk level: <strong>{z.level}</strong> • Score: <strong>{z.score}/100</strong>
+        </div>
+
+        <div className="notice">
+          ⚠️ This is a baseline/demo risk engine and is not a scientifically
+          validated prediction model.
+        </div>
+      </div>
+    </Page>
+  );
 }
 
 function Metric({ name, value, percent }: { name: string; value: string; percent: number }) {
