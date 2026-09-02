@@ -185,10 +185,26 @@ function Metric({ name, value, percent }: { name: string; value: string; percent
 }
 
 function AlertsPage() {
-  return <Page title="🚨 Alerts" description="Risk-based warnings and notification queue.">
-    <Alert level="CRITICAL" location="Aizawl North" text="Heavy rainfall and saturated soil conditions." />
-    <Alert level="HIGH" location="Gangtok East" text="Slope instability indicators detected." />
-    <Alert level="HIGH" location="Shillong Hills" text="Weather-linked landslide risk elevated." />
+  const [alerts, setAlerts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/alerts`)
+      .then(r => r.json())
+      .then(data => setAlerts(data.alerts || []))
+      .catch(() => setAlerts([]));
+  }, []);
+
+  return <Page title="🚨 Alerts" description="Live risk-based warnings and notification queue.">
+    {alerts.length > 0
+      ? alerts.map(a => (
+          <Alert
+            key={a.id}
+            level={a.severity}
+            location={a.location}
+            text={a.message}
+          />
+        ))
+      : <div className="notice">No active alerts.</div>}
   </Page>;
 }
 
@@ -197,31 +213,127 @@ function Alert({ level, location, text }: { level: string; location: string; tex
 }
 
 function ReportPage() {
+  const [incidentType, setIncidentType] = useState("Landslide");
+  const [severity, setSeverity] = useState("High");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<FileList | null>(null);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submitReport() {
+    setError("");
+    setSent(false);
+
+    if (!description.trim()) {
+      setError("Please describe the incident.");
+      return;
+    }
+
+    const form = new FormData();
+    form.append("incident_type", incidentType);
+    form.append("severity", severity);
+    form.append("description", description);
+    form.append("latitude", "23.1645");
+    form.append("longitude", "92.9376");
+
+    if (files) {
+      Array.from(files).forEach(file => {
+        form.append("files", file);
+      });
+    }
+
+    try {
+      const response = await fetch(`${API}/api/reports`, {
+        method: "POST",
+        body: form,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to submit report");
+      }
+
+      setSent(true);
+      setDescription("");
+      setFiles(null);
+    } catch (err: any) {
+      setError(err.message || "Failed to submit report");
+    }
+  }
+
   return <Page title="📸 Report Incident" description="Submit a geo-tagged field or citizen observation.">
     <div className="form">
-      <label>Incident Type<select><option>Landslide</option><option>Road Blockage</option><option>Slope Crack</option><option>Flash Flood</option></select></label>
-      <label>Severity<select><option>High</option><option>Critical</option><option>Moderate</option><option>Low</option></select></label>
-      <label>Description<textarea placeholder="Describe the incident..." /></label>
+      <label>
+        Incident Type
+        <select value={incidentType} onChange={e => setIncidentType(e.target.value)}>
+          <option>Landslide</option>
+          <option>Road Blockage</option>
+          <option>Slope Crack</option>
+          <option>Flash Flood</option>
+        </select>
+      </label>
+
+      <label>
+        Severity
+        <select value={severity} onChange={e => setSeverity(e.target.value)}>
+          <option>High</option>
+          <option>Critical</option>
+          <option>Moderate</option>
+          <option>Low</option>
+        </select>
+      </label>
+
+      <label>
+        Description
+        <textarea
+          placeholder="Describe the incident..."
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+        />
+      </label>
+
       <div className="location">📍 GPS Location: Ready to capture</div>
-      <label>Evidence<input type="file" accept="image/*,video/*" multiple /></label>
-      <button className="primary" onClick={() => setSent(true)}>SUBMIT GEO-TAGGED REPORT</button>
-      {sent && <div className="success">✓ Report queued successfully. Offline sync ready.</div>}
+
+      <label>
+        Evidence
+        <input
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          onChange={e => setFiles(e.target.files)}
+        />
+      </label>
+
+      <button className="primary" onClick={submitReport}>
+        SUBMIT GEO-TAGGED REPORT
+      </button>
+
+      {sent && <div className="success">✓ Report received successfully.</div>}
+      {error && <div className="notice">⚠️ {error}</div>}
     </div>
   </Page>;
 }
-
 function RoadPage() {
+  const [roads, setRoads] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/roads/status`)
+      .then(r => r.json())
+      .then(data => setRoads(data.roads || []))
+      .catch(() => setRoads([]));
+  }, []);
+
   return <Page title="🚧 Road Connectivity" description="Monitor vulnerable transportation routes.">
-    <DataTable rows={[
-      ["NH-10", "Gangtok → Siliguri", "BLOCKED"],
-      ["NH-6", "Shillong Region", "AT RISK"],
-      ["NH-37", "Assam Corridor", "OPERATIONAL"],
-      ["NH-15", "Arunachal Route", "AT RISK"],
-    ]} />
+    {roads.length > 0
+      ? <DataTable rows={roads.map(r => [
+          r.name || r.road || r.id,
+          r.route || r.location || "NER Corridor",
+          r.status
+        ])} />
+      : <div className="notice">Loading road connectivity data...</div>}
   </Page>;
 }
-
 function WeatherPage() {
   const [weather, setWeather] = useState<any>(null);
 
@@ -246,13 +358,28 @@ function WeatherPage() {
 }
 
 function EmergencyPage() {
-  return <Page title="🚑 Emergency Prioritisation" description="Prioritize field response based on risk and connectivity.">
-    <Alert level="CRITICAL" location="P1 — Aizawl North" text="Risk 87 • 3 villages • road blockage reported" />
-    <Alert level="HIGH" location="P2 — Gangtok East" text="Risk 74 • road at risk • rainfall elevated" />
-    <Alert level="HIGH" location="P2 — Shillong Hills" text="Risk 63 • heavy rainfall forecast" />
+  const [alerts, setAlerts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/alerts`)
+      .then(r => r.json())
+      .then(data => setAlerts(data.alerts || []))
+      .catch(() => setAlerts([]));
+  }, []);
+
+  return <Page title="🚑 Emergency Prioritisation" description="Prioritize field response using live risk alerts.">
+    {alerts.length > 0
+      ? alerts.map((a, i) => (
+          <Alert
+            key={a.id}
+            level={a.severity}
+            location={`P${i + 1} — ${a.location}`}
+            text={`Risk ${a.risk_score} • ${a.message}`}
+          />
+        ))
+      : <div className="notice">No active emergency alerts.</div>}
   </Page>;
 }
-
 function DataTable({ rows }: { rows: string[][] }) {
   return <div className="table">{rows.map(r => <div className="tableRow" key={r[0]}><strong>{r[0]}</strong><span>{r[1]}</span><span className={`pill ${r[2] === "BLOCKED" ? "critical" : r[2] === "AT RISK" ? "high" : "low"}`}>{r[2]}</span></div>)}</div>;
 }
