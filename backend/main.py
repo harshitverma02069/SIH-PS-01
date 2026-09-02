@@ -246,3 +246,26 @@ def get_roads():
 
 app.include_router(reports_router)
 app.include_router(weather_router)
+
+@app.post("/api/emergency/dispatch")
+def dispatch_emergency(data: dict):
+    return {
+        "success": True,
+        "dispatch_id": str(uuid4()),
+        "status": "DISPATCHED",
+        "priority": data.get("priority", "HIGH"),
+        "location": data.get("location", "Unknown"),
+        "message": "Emergency response team dispatched successfully",
+        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/emergency/resolve")
+def resolve_emergency(data: dict):
+    return {
+        "success": True,
+        "status": "RESOLVED",
+        "location": data.get("location", "Unknown"),
+        "message": "Emergency incident marked as resolved",
+        "resolved_at": datetime.now(timezone.utc).isoformat(),
+    }

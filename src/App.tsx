@@ -591,6 +591,9 @@ function WeatherPage() {
 
 function EmergencyPage() {
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [dispatching, setDispatching] = useState<number | null>(null);
+  const [resolved, setResolved] = useState<number[]>([]);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     fetch(`${API}/api/alerts`)
@@ -599,16 +602,104 @@ function EmergencyPage() {
       .catch(() => setAlerts([]));
   }, []);
 
-  return <Page title="🚑 Emergency Prioritisation" description="Prioritize field response using live risk alerts.">
+  async function dispatchEmergency(alert: any) {
+    setDispatching(alert.id);
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/emergency/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priority: alert.severity,
+          location: alert.location,
+          risk_score: alert.risk_score,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Dispatch failed");
+      }
+
+      setMessage(`🚑 Response dispatched to ${alert.location}`);
+    } catch (error: any) {
+      setMessage(`❌ ${error.message}`);
+    } finally {
+      setDispatching(null);
+    }
+  }
+
+  async function resolveEmergency(alert: any) {
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/emergency/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incident_id: alert.id,
+          location: alert.location,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Resolve failed");
+      }
+
+      setResolved(prev => [...prev, alert.id]);
+      setMessage(`✅ Incident at ${alert.location} marked as resolved`);
+    } catch (error: any) {
+      setMessage(`❌ ${error.message}`);
+    }
+  }
+
+  return <Page
+    title="🚑 Emergency Prioritisation"
+    description="Prioritize field response using live risk alerts."
+  >
+    {message && <div className="notice">{message}</div>}
+
     {alerts.length > 0
-      ? alerts.map((a, i) => (
-          <Alert
-            key={a.id}
-            level={a.severity}
-            location={`P${i + 1} — ${a.location}`}
-            text={`Risk ${a.risk_score} • ${a.message}`}
-          />
-        ))
+      ? alerts.map((a, i) => {
+          const isResolved = resolved.includes(a.id);
+
+          return (
+            <div className="card" key={a.id}>
+              <Alert
+                level={a.severity}
+                location={`P${i + 1} — ${a.location}`}
+                text={`Risk ${a.risk_score} • ${a.message}`}
+              />
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                {!isResolved && (
+                  <>
+                    <button
+                      onClick={() => dispatchEmergency(a)}
+                      disabled={dispatching === a.id}
+                    >
+                      {dispatching === a.id ? "Dispatching..." : "🚑 Dispatch Response"}
+                    </button>
+
+                    <button onClick={() => resolveEmergency(a)}>
+                      ✅ Resolve Incident
+                    </button>
+                  </>
+                )}
+
+                {isResolved && (
+                  <div className="notice">
+                    ✅ RESOLVED
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })
       : <div className="notice">No active emergency alerts.</div>}
   </Page>;
 }
