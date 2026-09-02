@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers.reports import router as reports_router
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 from routers.weather import router as weather_router
 
 app = FastAPI(
@@ -244,28 +245,57 @@ def get_roads():
     }
 
 
+EMERGENCY_CASES = []
+
 app.include_router(reports_router)
 app.include_router(weather_router)
 
 @app.post("/api/emergency/dispatch")
 def dispatch_emergency(data: dict):
-    return {
-        "success": True,
+    emergency = {
         "dispatch_id": str(uuid4()),
-        "status": "DISPATCHED",
+        "incident_id": data.get("incident_id"),
         "priority": data.get("priority", "HIGH"),
         "location": data.get("location", "Unknown"),
-        "message": "Emergency response team dispatched successfully",
+        "risk_score": data.get("risk_score", 0),
+        "status": "DISPATCHED",
         "dispatched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    EMERGENCY_CASES.append(emergency)
+
+    return {
+        "success": True,
+        "message": "Emergency response team dispatched successfully",
+        **emergency,
+    }
+
+
+@app.get("/api/emergency")
+def get_emergencies():
+    return {
+        "success": True,
+        "emergencies": EMERGENCY_CASES,
     }
 
 
 @app.post("/api/emergency/resolve")
 def resolve_emergency(data: dict):
+    incident_id = data.get("incident_id")
+    location = data.get("location")
+
+    for emergency in EMERGENCY_CASES:
+        if emergency.get("incident_id") == incident_id or emergency.get("location") == location:
+            emergency["status"] = "RESOLVED"
+            emergency["resolved_at"] = datetime.now(timezone.utc).isoformat()
+
+            return {
+                "success": True,
+                "message": "Emergency incident marked as resolved",
+                **emergency,
+            }
+
     return {
-        "success": True,
-        "status": "RESOLVED",
-        "location": data.get("location", "Unknown"),
-        "message": "Emergency incident marked as resolved",
-        "resolved_at": datetime.now(timezone.utc).isoformat(),
+        "success": False,
+        "message": "Emergency incident not found",
     }

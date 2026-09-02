@@ -590,10 +590,115 @@ function WeatherPage() {
 }
 
 function EmergencyPage() {
-  const [alerts, setAlerts] = useState<any[]>([]);
-  const [dispatching, setDispatching] = useState<number | null>(null);
-  const [resolved, setResolved] = useState<number[]>([]);
+  const [emergencies, setEmergencies] = useState<any[]>([]);
   const [message, setMessage] = useState("");
+
+  async function loadEmergencies() {
+    try {
+      const response = await fetch(`${API}/api/emergency`);
+      const data = await response.json();
+      setEmergencies(data.emergencies || []);
+    } catch {
+      setEmergencies([]);
+    }
+  }
+
+  useEffect(() => {
+    loadEmergencies();
+  }, []);
+
+  async function dispatchEmergency(a: any) {
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/emergency/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incident_id: a.id,
+          priority: a.severity,
+          location: a.location,
+          risk_score: a.risk_score,
+        }),
+      });
+
+      const data = await response.json();
+      setMessage(data.message || "Emergency dispatched.");
+      loadEmergencies();
+    } catch {
+      setMessage("Failed to dispatch emergency.");
+    }
+  }
+
+  async function resolveEmergency(e: any) {
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/emergency/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incident_id: e.incident_id,
+          location: e.location,
+        }),
+      });
+
+      const data = await response.json();
+      setMessage(data.message || "Emergency resolved.");
+      loadEmergencies();
+    } catch {
+      setMessage("Failed to resolve emergency.");
+    }
+  }
+
+  return (
+    <Page
+      title="🚑 Emergency Prioritisation"
+      description="Prioritize field response using live risk alerts."
+    >
+      {message && <div className="notice">{message}</div>}
+
+      {emergencies.length > 0 ? (
+        emergencies.map((e, i) => (
+          <div className="card" key={e.dispatch_id}>
+            <h3>
+              P{i + 1} — {e.location}
+            </h3>
+
+            <p>
+              Risk Score: <strong>{e.risk_score}/100</strong>
+            </p>
+
+            <p>
+              Priority: <strong>{e.priority}</strong>
+            </p>
+
+            <p>
+              Status: <strong>{e.status}</strong>
+            </p>
+
+            {e.status === "DISPATCHED" ? (
+              <button onClick={() => resolveEmergency(e)}>
+                Mark Resolved
+              </button>
+            ) : (
+              <span className="pill low">RESOLVED</span>
+            )}
+          </div>
+        ))
+      ) : (
+        <div className="notice">No active emergency cases.</div>
+      )}
+
+      <h2>Live Risk Alerts</h2>
+
+      <AlertList onDispatch={dispatchEmergency} />
+    </Page>
+  );
+}
+
+function AlertList({ onDispatch }: { onDispatch: (a: any) => void }) {
+  const [alerts, setAlerts] = useState<any[]>([]);
 
   useEffect(() => {
     fetch(`${API}/api/alerts`)
@@ -602,107 +707,26 @@ function EmergencyPage() {
       .catch(() => setAlerts([]));
   }, []);
 
-  async function dispatchEmergency(alert: any) {
-    setDispatching(alert.id);
-    setMessage("");
-
-    try {
-      const response = await fetch(`${API}/api/emergency/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          priority: alert.severity,
-          location: alert.location,
-          risk_score: alert.risk_score,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Dispatch failed");
-      }
-
-      setMessage(`🚑 Response dispatched to ${alert.location}`);
-    } catch (error: any) {
-      setMessage(`❌ ${error.message}`);
-    } finally {
-      setDispatching(null);
-    }
-  }
-
-  async function resolveEmergency(alert: any) {
-    setMessage("");
-
-    try {
-      const response = await fetch(`${API}/api/emergency/resolve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          incident_id: alert.id,
-          location: alert.location,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Resolve failed");
-      }
-
-      setResolved(prev => [...prev, alert.id]);
-      setMessage(`✅ Incident at ${alert.location} marked as resolved`);
-    } catch (error: any) {
-      setMessage(`❌ ${error.message}`);
-    }
-  }
-
-  return <Page
-    title="🚑 Emergency Prioritisation"
-    description="Prioritize field response using live risk alerts."
-  >
-    {message && <div className="notice">{message}</div>}
-
-    {alerts.length > 0
-      ? alerts.map((a, i) => {
-          const isResolved = resolved.includes(a.id);
-
-          return (
-            <div className="card" key={a.id}>
-              <Alert
-                level={a.severity}
-                location={`P${i + 1} — ${a.location}`}
-                text={`Risk ${a.risk_score} • ${a.message}`}
-              />
-
-              <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
-                {!isResolved && (
-                  <>
-                    <button
-                      onClick={() => dispatchEmergency(a)}
-                      disabled={dispatching === a.id}
-                    >
-                      {dispatching === a.id ? "Dispatching..." : "🚑 Dispatch Response"}
-                    </button>
-
-                    <button onClick={() => resolveEmergency(a)}>
-                      ✅ Resolve Incident
-                    </button>
-                  </>
-                )}
-
-                {isResolved && (
-                  <div className="notice">
-                    ✅ RESOLVED
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })
-      : <div className="notice">No active emergency alerts.</div>}
-  </Page>;
+  return alerts.length > 0 ? (
+    <>
+      {alerts.map(a => (
+        <div className="card" key={a.id}>
+          <Alert
+            level={a.severity}
+            location={a.location}
+            text={`Risk ${a.risk_score} • ${a.message}`}
+          />
+          <button onClick={() => onDispatch(a)}>
+            🚑 Dispatch Response
+          </button>
+        </div>
+      ))}
+    </>
+  ) : (
+    <div className="notice">No active emergency alerts.</div>
+  );
 }
+
 function DataTable({ rows }: { rows: string[][] }) {
   return <div className="table">{rows.map(r => <div className="tableRow" key={r[0]}><strong>{r[0]}</strong><span>{r[1]}</span><span className={`pill ${r[2] === "BLOCKED" ? "critical" : r[2] === "AT RISK" ? "high" : "low"}`}>{r[2]}</span></div>)}</div>;
 }
