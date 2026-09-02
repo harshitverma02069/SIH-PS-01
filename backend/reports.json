@@ -1,0 +1,17 @@
+[
+  {
+    "success": true,
+    "report_id": "967aad18-1a7f-403c-940f-90a47608160c",
+    "client_report_id": "test-terminal-002",
+    "incident_type": "Landslide",
+    "severity": "CRITICAL",
+    "description": "Persistent storage test",
+    "latitude": 23.7271,
+    "longitude": 92.7176,
+    "submitted_at": "2026-09-02T15:26:06.902497+00:00",
+    "media_count": 0,
+    "media": [],
+    "status": "RECEIVED",
+    "message": "Incident report received successfully"
+  }
+]

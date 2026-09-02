@@ -73,6 +73,7 @@ function App() {
           ["prediction", "🤖 Prediction"],
           ["alerts", "🚨 Alerts"],
           ["report", "📸 Report Incident"],
+          ["history", "📋 Incident History"],
           ["roads", "🚧 Roads"],
           ["weather", "🌧️ Weather"],
           ["emergency", "🚑 Emergency"],
@@ -123,6 +124,7 @@ function App() {
         {page === "prediction" && <PredictionPage zones={zones} />}
         {page === "alerts" && <AlertsPage />}
         {page === "report" && <ReportPage />}
+        {page === "history" && <ReportsPage />}
         {page === "roads" && <RoadPage />}
         {page === "weather" && <WeatherPage />}
         {page === "emergency" && <EmergencyPage />}
@@ -400,6 +402,40 @@ function ReportPage() {
     </div>
   </Page>;
 }
+
+function ReportsPage() {
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/reports`)
+      .then(r => r.json())
+      .then(data => setReports(data.reports || []))
+      .catch(() => setReports([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return <Page title="📋 Incident History" description="Previously submitted field and citizen reports.">
+    {loading ? (
+      <div className="notice">Loading incident reports...</div>
+    ) : reports.length > 0 ? (
+      <div className="table">
+        {reports.map(report => (
+          <div className="tableRow" key={report.report_id}>
+            <strong>{report.incident_type}</strong>
+            <span>{report.description}</span>
+            <span className={`pill ${report.severity.toLowerCase()}`}>
+              {report.severity}
+            </span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="notice">No incident reports submitted yet.</div>
+    )}
+  </Page>;
+}
+
 function RoadPage() {
   const [roads, setRoads] = useState<any[]>([]);
 

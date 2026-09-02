@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
+from report_store import save_report, get_reports
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -83,7 +84,7 @@ async def create_report(
 
     report_id = str(uuid4())
 
-    return {
+    report = {
         "success": True,
         "report_id": report_id,
         "client_report_id": client_report_id,
@@ -97,4 +98,17 @@ async def create_report(
         "media": saved_files,
         "status": "RECEIVED",
         "message": "Incident report received successfully",
+    }
+
+    save_report(report)
+
+    return report
+
+
+@router.get("")
+def list_reports():
+    reports = get_reports()
+    return {
+        "count": len(reports),
+        "reports": reports,
     }
