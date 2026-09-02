@@ -230,6 +230,7 @@ function ReportPage() {
     }
 
     const form = new FormData();
+    form.append("client_report_id", crypto.randomUUID());
     form.append("incident_type", incidentType);
     form.append("severity", severity);
     form.append("description", description);
